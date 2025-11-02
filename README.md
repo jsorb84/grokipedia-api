@@ -42,6 +42,21 @@ Fetch "Elon Musk" article:
 curl https://grokipedia-api.com/article/Elon_Musk
 ```
 
+Fetch "Austin, Texas" article:
+```
+curl https://grokipedia-api.com/article/Austin,_Texas
+```
+
+Fetch "Harley-Davidson" article:
+```
+curl https://grokipedia-api.com/article/Harley-Davidson
+```
+
+Fetch "AT&T" article:
+```
+curl https://grokipedia-api.com/article/AT&T
+```
+
 ## Contributing
 1. Fork the repo.
 2. Create a feature branch (git checkout -b feature/slug-normalization).
