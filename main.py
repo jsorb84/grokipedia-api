@@ -258,8 +258,9 @@ async def get_page(
     _cache[cache_key] = (page, now)
     
     if discord:
+        discord_clean_txt = content_text.replace("\n\n", "")
         webhook = DiscordWebhook(url="https://discord.com/api/webhooks/1448029503224807454/jJg3_K94BFDdwocK6bBrF6XXO3hpemqJSdfCyVHln107K5USSjyIg_ABlhrXSUa3coqi")
-        embed = DiscordEmbed(title=page_title, description=content_text, color="03b2f8")
+        embed = DiscordEmbed(title=page_title, description=discord_clean_txt, color="03b2f8")
         embed.set_thumbnail(url="https://images-ext-1.discordapp.net/external/ArUio-9FyAik8zLqdBDPhiNbQt1ozYbSL0FYvUaXXAQ/https/grokipedia.com/icon-512x512.png?format=webp&quality=lossless")
         embed.set_author(name="Grokipedia", url=url, icon_url="https://images-ext-1.discordapp.net/external/ArUio-9FyAik8zLqdBDPhiNbQt1ozYbSL0FYvUaXXAQ/https/grokipedia.com/icon-512x512.png?format=webp&quality=lossless")
         embed.set_timestamp()
