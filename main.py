@@ -236,7 +236,7 @@ async def get_page(
     page_title = h1.get_text(strip=True) if h1 else slug.replace("_", " ")
     
     content_text = re.sub(r'\n{3,}', '\n\n', content_div.get_text(separator="\n\n", strip=True))
-    if truncate:
+    if truncate and not discord:
         content_text = content_text[:truncate]
     if discord:
         discord_content_text = content_text[:500]
