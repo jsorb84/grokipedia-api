@@ -80,8 +80,20 @@ class Page(BaseModel):
     content_text: str
     char_count: int
     word_count: int
+    lastFactCheck: int
     references_count: int
     references: Optional[List[Reference]] = None
+
+class PageAttributes(BaseModel):
+    """
+    Holds things like the sections by header
+
+    """
+    page: Page
+    factCheckLast: str
+
+
+
 
 def normalize_slug(input_str: str, title_case: bool = True) -> str:
     # Handle potential double-encoding from browser address bar (e.g., typing "at%26t" sends "at%2526t", decoded to "at%26t")
@@ -115,6 +127,9 @@ def find_content_div(soup: BeautifulSoup) -> BeautifulSoup:
         if div:
             return div
     return soup.body
+
+
+
 
 def extract_references(soup: BeautifulSoup) -> tuple[List[Reference], int]:
     # First, try to find <div id="references">
@@ -194,6 +209,12 @@ async def read_root():
             status_code=404
         )
 
+def grok_date(soup: BeautifulSoup) -> str:
+    fcGrokBtn = soup.find("button").find("div").find_all("span", limit=2)
+    for span in fcGrokBtn:
+        if not span.has_attr("class"):
+            return span.get_text(separator="\n\n", strip=True)
+
 @app.get("/page/{slug:path}", response_model=Page, dependencies=[Depends(rate_limit_dependency)])
 async def get_page(
     slug: str,
@@ -233,9 +254,14 @@ async def get_page(
     content_div = find_content_div(soup)
     
     h1 = content_div.find("h1")
+
+
     page_title = h1.get_text(strip=True) if h1 else slug.replace("_", " ")
     
     content_text = re.sub(r'\n{3,}', '\n\n', content_div.get_text(separator="\n\n", strip=True))
+
+    grokDate = grok_date(content_text)
+
     if truncate and not discord:
         content_text = content_text[:truncate]
     if discord:
@@ -254,6 +280,7 @@ async def get_page(
         "word_count": words,
         "references_count": refs_count,
         "references": references,
+        "grokDate": grokDate
     }
     page = Page(**page_dict)
     
