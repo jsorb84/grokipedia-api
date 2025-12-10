@@ -84,13 +84,7 @@ class Page(BaseModel):
     references_count: int
     references: Optional[List[Reference]] = None
 
-class PageAttributes(BaseModel):
-    """
-    Holds things like the sections by header
 
-    """
-    page: Page
-    factCheckLast: str
 
 
 
@@ -260,7 +254,7 @@ async def get_page(
     
     content_text = re.sub(r'\n{3,}', '\n\n', content_div.get_text(separator="\n\n", strip=True))
 
-    grokDate = grok_date(content_text)
+    grokDate = grok_date(content_div)
 
     if truncate and not discord:
         content_text = content_text[:truncate]
