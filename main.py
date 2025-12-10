@@ -80,7 +80,7 @@ class Page(BaseModel):
     content_text: str
     char_count: int
     word_count: int
-    lastFactCheck: int
+    lastFactCheck: Optional[str]
     references_count: int
     references: Optional[List[Reference]] = None
 
@@ -190,6 +190,33 @@ def get_cached_slugs():
         slugs.add(slug)
     return sorted(list(slugs))  # Sort alphabetically for consistency
 
+def grok_date(soup: BeautifulSoup) -> str:
+    fcGrokBtn = soup.find("button")
+    btnSub = fcGrokBtn.find("div").find_all("span", limit=2)
+    # delBtn = soup("button", attrs=dict(("data-state", "closed")))
+    # for tag in delBtn:
+    #     tag.decompose()
+    for span in btnSub:
+        if not span.has_attr("class"):
+            foundText = span.get_text(separator="\n\n", strip=True)
+            for tag in soup("button", {"data-state": "closed"}):
+                tag.decompose()
+            return foundText
+    return "N/A"
+
+def factCheckField(embed: DiscordEmbed, lfcStr: str) -> None:
+    if lfcStr != "N/A":
+        lfc = lfcStr if lfcStr else ""
+        if lfc != "":
+            lfcr = lfc.replace("\n\n", " ")
+            lfc_time_raw = lfcr.split(" by Grok ")
+            lfc_time = lfc_time_raw[1].title() if lfc_time_raw[1] else "Unknown"
+            embed.add_embed_field("Last Checked", lfc_time)
+        else:
+            embed.add_embed_field("Last Checked", "Unknown")
+    else:
+        embed.add_embed_field("Last Checked", "Unknown")
+
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def read_root():
     if INDEX_PATH.exists():
@@ -202,12 +229,6 @@ async def read_root():
             content="<h1>File not found!</h1><p>Please try again.</p>",
             status_code=404
         )
-
-def grok_date(soup: BeautifulSoup) -> str:
-    fcGrokBtn = soup.find("button").find("div").find_all("span", limit=2)
-    for span in fcGrokBtn:
-        if not span.has_attr("class"):
-            return span.get_text(separator="\n\n", strip=True)
 
 @app.get("/page/{slug:path}", response_model=Page, dependencies=[Depends(rate_limit_dependency)])
 async def get_page(
@@ -255,6 +276,12 @@ async def get_page(
     content_text = re.sub(r'\n{3,}', '\n\n', content_div.get_text(separator="\n\n", strip=True))
 
     grokDate = grok_date(content_div)
+    # Remove the "Last Fact Checked" from Content
+    gdl = len(grokDate)
+    content_text = content_text[gdl:]
+    # Remove the title from body
+    tl = len(page_title)+2
+    content_text = content_text[tl:]
 
     if truncate and not discord:
         content_text = content_text[:truncate]
@@ -274,7 +301,7 @@ async def get_page(
         "word_count": words,
         "references_count": refs_count,
         "references": references,
-        "lastFactCheck": grokDate
+        "lastFactCheck": grokDate if grokDate else "N/A"
     }
     page = Page(**page_dict)
     
@@ -285,13 +312,23 @@ async def get_page(
     
     if discord:
         discord_clean_txt = discord_content_text.replace("\n\n", " ")
-        webhook = DiscordWebhook(url="https://discord.com/api/webhooks/1448029503224807454/jJg3_K94BFDdwocK6bBrF6XXO3hpemqJSdfCyVHln107K5USSjyIg_ABlhrXSUa3coqi")
+        webhookUrl = os.getenv("WEBHOOK_URL")
+        
+        webhook = DiscordWebhook(url=webhookUrl, thread_id="1448424468459556884")
+
+        
         embed = DiscordEmbed(title=page_title, description=discord_clean_txt, color="03b2f8")
         embed.set_thumbnail(url="https://images-ext-1.discordapp.net/external/ArUio-9FyAik8zLqdBDPhiNbQt1ozYbSL0FYvUaXXAQ/https/grokipedia.com/icon-512x512.png?format=webp&quality=lossless")
         embed.set_author(name="Grokipedia", url=url, icon_url="https://images-ext-1.discordapp.net/external/ArUio-9FyAik8zLqdBDPhiNbQt1ozYbSL0FYvUaXXAQ/https/grokipedia.com/icon-512x512.png?format=webp&quality=lossless")
         embed.set_timestamp()
         embed.set_url(url)
         embed.set_footer(text=f"{page_title} entry from Grokipedia")
+        
+        factCheckField(embed, page_dict["lastFactCheck"])
+        
+        embed.add_embed_field("Word Count", words)
+        embed.add_embed_field("References", refs_count)
+        
         webhook.add_embed(embed)
         webhook.execute()
     # webhook = SyncWebhook.from_url("https://discord.com/api/webhooks/1371612004803936286/uhqqHO-7diNFx4JDGJxuNV8c3STc5J6YUyaPuWMj1Em_UyMqYB1vqSZ8Bu54LS-Sxk1Z")
