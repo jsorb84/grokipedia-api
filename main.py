@@ -280,7 +280,7 @@ async def get_page(
         "word_count": words,
         "references_count": refs_count,
         "references": references,
-        "grokDate": grokDate
+        "lastFactCheck": grokDate
     }
     page = Page(**page_dict)
     
