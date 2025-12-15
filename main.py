@@ -1,12 +1,15 @@
 # Unofficial API for xAI's Grokipedia (not affiliated)
 from api_analytics.fastapi import Analytics
 from fastapi import FastAPI, HTTPException, Query, Request, Depends
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, TypeAdapter
+from nacl.signing import VerifyKey
+from nacl.exceptions import BadSignatureError
 from typing import Optional, List
 from bs4 import BeautifulSoup
 import requests
+from discord.interactions import InteractionResponse, InteractionResponseType, Interaction
 import re
 import urllib.parse
 from datetime import datetime, timedelta
@@ -15,7 +18,10 @@ from pathlib import Path
 import sys
 from collections import defaultdict
 import time
+import discord.embeds as embeds
 import os
+from typing import Dict, TypedDict, Type, Tuple
+
 from dotenv import load_dotenv
 from discord_webhook import DiscordWebhook, DiscordEmbed
 
@@ -29,6 +35,26 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc"
 )
+#  "title": page_title,
+#             "description": discord_clean_txt,
+#             "color": "03b2f8",
+#             "thumbnailUrl": "https://images-ext-1.discordapp.net/external/ArUio-9FyAik8zLqdBDPhiNbQt1ozYbSL0FYvUaXXAQ/https/grokipedia.com/icon-512x512.png?format=webp&quality=lossless",
+#             "authorName": "Grokipedia",
+#             "authorUrl": url,
+#             "authorIconUrl": "https://images-ext-1.discordapp.net/external/ArUio-9FyAik8zLqdBDPhiNbQt1ozYbSL0FYvUaXXAQ/https/grokipedia.com/icon-512x512.png?format=webp&quality=lossless",
+#             "lastFactCheck": page_dict["lastFactCheck"]
+class EmbedData(TypedDict):
+    title: str
+    description: str
+    color: str
+    thumbnailUrl: str
+    authorName: str
+    authorUrl: str
+    authorIconUrl: str
+    lastFactCheck: str
+
+
+
 
 # Add FastAPI Analytics middleware with API key
 app.add_middleware(Analytics, api_key=os.getenv("ANALYTICS_KEY") )
@@ -57,6 +83,12 @@ request_times = defaultdict(list)
 RATE_LIMIT = 100  # Generous: 100 requests per window
 RATE_WINDOW = 60  # 60 seconds (1 minute)
 
+PUBLIC_KEY = os.getenv("DISCORD_PUBLIC_KEY")
+
+
+type VerifyReturn = Tuple[bool, JSONResponse]
+
+
 def rate_limit_dependency(request: Request):
     client_ip = request.client.host
     now = time.time()
@@ -73,6 +105,7 @@ class Reference(BaseModel):
     number: int
     url: str = ""
 
+
 class Page(BaseModel):
     title: str
     slug: str
@@ -83,10 +116,7 @@ class Page(BaseModel):
     lastFactCheck: Optional[str]
     references_count: int
     references: Optional[List[Reference]] = None
-
-
-
-
+    embed: EmbedData | None = None
 
 
 def normalize_slug(input_str: str, title_case: bool = True) -> str:
@@ -217,6 +247,44 @@ def factCheckField(embed: DiscordEmbed, lfcStr: str) -> None:
     else:
         embed.add_embed_field("Last Checked", "Unknown")
 
+class DiscordInteractionResponse(JSONResponse):
+    interaction: Interaction | None = None
+    response: InteractionResponse | None = None
+    request: Request | None = None
+    def __init__(self, req: Request, **kwargs):
+        super().__init__(kwargs.get("content", {}), kwargs.get("status_code", 200), kwargs.get("status_code", 200), kwargs.get("media_type", "application/json"), kwargs.get("background", None))
+        self.request = req
+        req_type = self.request.get("type")
+        if req_type == 1:
+            self.pong()
+    def pong(self):
+        req_type = self.request.get("type")
+        # Handle Ping
+        if req_type and req_type == 1:
+            self.body = self.render({"type": 1, "data": {}})
+        
+    async def verify_interaction(self) -> bool:
+        verify_key = VerifyKey(bytes.fromhex(PUBLIC_KEY))
+        req = self.request
+        signature = req.headers.get('X-Signature-Ed25519')
+        timestamp = req.headers.get('X-Signature-Timestamp')
+        body = await req.body()
+        decoded = body.decode()
+        try:
+            verified = verify_key.verify((f"{timestamp}{body}").encode(), bytes.fromhex(signature))
+            return True
+        except BadSignatureError:
+            self.status_code = 401
+            return False
+
+@app.post("/interaction", response_class=DiscordInteractionResponse)
+async def discord_interaction(req: Request):
+    interaction_response = DiscordInteractionResponse(req)
+    return interaction_response
+    
+    
+        
+
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def read_root():
     if INDEX_PATH.exists():
@@ -301,7 +369,8 @@ async def get_page(
         "word_count": words,
         "references_count": refs_count,
         "references": references,
-        "lastFactCheck": grokDate if grokDate else "N/A"
+        "lastFactCheck": grokDate if grokDate else "N/A",
+        "embed": None
     }
     page = Page(**page_dict)
     
@@ -312,11 +381,9 @@ async def get_page(
     
     if discord:
         discord_clean_txt = discord_content_text.replace("\n\n", " ")
-        webhookUrl = os.getenv("WEBHOOK_URL")
+        #webhookUrl = os.getenv("WEBHOOK_URL")
         
-        webhook = DiscordWebhook(url=webhookUrl, thread_id="1448424468459556884")
-
-        
+        #webhook = DiscordWebhook(url=webhookUrl, thread_id="1448424468459556884")
         embed = DiscordEmbed(title=page_title, description=discord_clean_txt, color="03b2f8")
         embed.set_thumbnail(url="https://images-ext-1.discordapp.net/external/ArUio-9FyAik8zLqdBDPhiNbQt1ozYbSL0FYvUaXXAQ/https/grokipedia.com/icon-512x512.png?format=webp&quality=lossless")
         embed.set_author(name="Grokipedia", url=url, icon_url="https://images-ext-1.discordapp.net/external/ArUio-9FyAik8zLqdBDPhiNbQt1ozYbSL0FYvUaXXAQ/https/grokipedia.com/icon-512x512.png?format=webp&quality=lossless")
@@ -328,9 +395,20 @@ async def get_page(
         
         embed.add_embed_field("Word Count", words)
         embed.add_embed_field("References", refs_count)
-        
-        webhook.add_embed(embed)
-        webhook.execute()
+        embed_dict = {
+            "title": page_title,
+            "description": discord_clean_txt,
+            "color": "03b2f8",
+            "thumbnailUrl": "https://images-ext-1.discordapp.net/external/ArUio-9FyAik8zLqdBDPhiNbQt1ozYbSL0FYvUaXXAQ/https/grokipedia.com/icon-512x512.png?format=webp&quality=lossless",
+            "authorName": "Grokipedia",
+            "authorUrl": url,
+            "authorIconUrl": "https://images-ext-1.discordapp.net/external/ArUio-9FyAik8zLqdBDPhiNbQt1ozYbSL0FYvUaXXAQ/https/grokipedia.com/icon-512x512.png?format=webp&quality=lossless",
+            "lastFactCheck": page_dict["lastFactCheck"]
+        }
+        #page['embed'] = embed_dict
+        page.embed = embed_dict
+        #webhook.add_embed(embed)
+        #webhook.execute()
     # webhook = SyncWebhook.from_url("https://discord.com/api/webhooks/1371612004803936286/uhqqHO-7diNFx4JDGJxuNV8c3STc5J6YUyaPuWMj1Em_UyMqYB1vqSZ8Bu54LS-Sxk1Z")
     # webhook.send(content=f"Title: {page_dict.title}")
 
@@ -355,6 +433,10 @@ async def health(key: str = Query(..., description="Secret key for health endpoi
         "timestamp": datetime.now().isoformat()
     }
 
+
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
+    #uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
