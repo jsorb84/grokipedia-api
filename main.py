@@ -254,6 +254,7 @@ class DiscordInteractionResponse(JSONResponse):
     def __init__(self, req: Request, **kwargs):
         super().__init__(kwargs.get("content", {}), kwargs.get("status_code", 200), kwargs.get("headers", None), kwargs.get("media_type", "application/json"), kwargs.get("background", None))
         self.request = req
+        self.setup_agent_header()
         req_type = self.request.get("type")
         if req_type == 1:
             self.pong()
@@ -262,7 +263,10 @@ class DiscordInteractionResponse(JSONResponse):
         # Handle Ping
         if req_type and req_type == 1:
             self.body = self.render({"type": 1, "data": {}})
-        
+    
+    def setup_agent_header(self):
+        vercel_url = "grokipedia-api-nu.vercel.app"
+        self.headers.append("User-Agent", f"DiscordBot ({vercel_url}, {app.version})")
     async def verify_interaction(self) -> bool:
         verify_key = VerifyKey(bytes.fromhex(PUBLIC_KEY))
         req = self.request
