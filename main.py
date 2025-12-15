@@ -252,7 +252,7 @@ class DiscordInteractionResponse(JSONResponse):
     response: InteractionResponse | None = None
     request: Request | None = None
     def __init__(self, req: Request, **kwargs):
-        super().__init__(kwargs.get("content", {}), kwargs.get("status_code", 200), kwargs.get("status_code", 200), kwargs.get("media_type", "application/json"), kwargs.get("background", None))
+        super().__init__(kwargs.get("content", {}), kwargs.get("status_code", 200), kwargs.get("headers", None), kwargs.get("media_type", "application/json"), kwargs.get("background", None))
         self.request = req
         req_type = self.request.get("type")
         if req_type == 1:
