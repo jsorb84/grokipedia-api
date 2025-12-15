@@ -258,10 +258,11 @@ class DiscordInteractionResponse(JSONResponse):
         req_type = self.request.get("type")
         if req_type == 1:
             self.pong()
+        
     def pong(self):
         req_type = self.request.get("type")
         # Handle Ping
-        if req_type and req_type == 1:
+        if req_type and (req_type == 1 or req_type == "1"):
             self.body = self.render({"type": 1, "data": {}})
     
     def setup_agent_header(self):
@@ -284,6 +285,8 @@ class DiscordInteractionResponse(JSONResponse):
 @app.post("/interaction", response_class=DiscordInteractionResponse)
 async def discord_interaction(req: Request):
     interaction_response = DiscordInteractionResponse(req)
+    verify = await interaction_response.verify_interaction()
+    print(f"Verified: {verify}")
     return interaction_response
     
     
