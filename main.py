@@ -293,54 +293,9 @@ def create_response_url(resp: InteractionResponseModel) -> str:
     blank = f"https://discord.com/api/v10/interactions/{resp.interaction_id}/{resp.interaction_token}/callback"
     return blank
 
-@app.post("/interaction", response_model=InteractionResponseModel)
-async def discord_interaction(req: Request):
-    
-    
-    interaction_response = DiscordInteractionResponse(req)
-    req_body = await req.json()
-    verify = await interaction_response.verify_interaction()
-    if verify is False:
-        raise HTTPException(status_code=401)
-    intType = req_body["type"]
-    int_id = req_body["id"]
-    int_token = req_body["token"]
-    if intType and intType == InteractionType.PING:
-        return InteractionResponseModel(type=InteractionResponseType.PONG, data=dict({}), interaction_id=int_id, interaction_token=int_token)
-    if intType and intType == InteractionType.APPLICATION_COMMAND:
-        newResp = InteractionResponseModel(type=InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, data=dict({}), interaction_id=int_id, interaction_token=int_token)
-        print(f"Application Command: {create_response_url(newResp)} {req_body}")
-        return newResp
 
-    print(f"Verified: {verify}")
     
-    return InteractionResponseModel(type=InteractionResponseType.PONG, data=dict({}), interaction_id="", interaction_token="")
-    
-    
-        
-
-@app.get("/", response_class=HTMLResponse, include_in_schema=False)
-async def read_root():
-    if INDEX_PATH.exists():
-        with open(INDEX_PATH, "r", encoding="utf-8") as f:
-            html_content = f.read()
-        return HTMLResponse(content=html_content)
-    else:
-        # Fallback if file doesn't exist
-        return HTMLResponse(
-            content="<h1>File not found!</h1><p>Please try again.</p>",
-            status_code=404
-        )
-
-@app.get("/page/{slug:path}", response_model=Page, dependencies=[Depends(rate_limit_dependency)])
-async def get_page(
-    slug: str,
-    extract_refs: bool = Query(True),
-    truncate: Optional[int] = Query(None),
-    citations: bool = Query(False),
-    discord: bool = Query(False),
-    title_case: bool = Query(True)
-):
+def handle_page_processing(slug: str, extract_refs: bool = True, citations: bool= False, discord:bool = False, title_case:bool = False, truncate: int | None = None) -> Page:
     slug = normalize_slug(slug, title_case)
     
     cache_key = f"{slug}:{extract_refs}:{truncate or 'full'}:{citations}"
@@ -415,9 +370,7 @@ async def get_page(
     
     if discord:
         discord_clean_txt = discord_content_text.replace("\n\n", " ")
-        #webhookUrl = os.getenv("WEBHOOK_URL")
         
-        #webhook = DiscordWebhook(url=webhookUrl, thread_id="1448424468459556884")
         embed = DiscordEmbed(title=page_title, description=discord_clean_txt, color="03b2f8")
         embed.set_thumbnail(url="https://images-ext-1.discordapp.net/external/ArUio-9FyAik8zLqdBDPhiNbQt1ozYbSL0FYvUaXXAQ/https/grokipedia.com/icon-512x512.png?format=webp&quality=lossless")
         embed.set_author(name="Grokipedia", url=url, icon_url="https://images-ext-1.discordapp.net/external/ArUio-9FyAik8zLqdBDPhiNbQt1ozYbSL0FYvUaXXAQ/https/grokipedia.com/icon-512x512.png?format=webp&quality=lossless")
@@ -439,13 +392,79 @@ async def get_page(
             "authorIconUrl": "https://images-ext-1.discordapp.net/external/ArUio-9FyAik8zLqdBDPhiNbQt1ozYbSL0FYvUaXXAQ/https/grokipedia.com/icon-512x512.png?format=webp&quality=lossless",
             "lastFactCheck": page_dict["lastFactCheck"]
         }
-        #page['embed'] = embed_dict
+        
         page.embed = embed_dict
-        #webhook.add_embed(embed)
-        #webhook.execute()
-    # webhook = SyncWebhook.from_url("https://discord.com/api/webhooks/1371612004803936286/uhqqHO-7diNFx4JDGJxuNV8c3STc5J6YUyaPuWMj1Em_UyMqYB1vqSZ8Bu54LS-Sxk1Z")
-    # webhook.send(content=f"Title: {page_dict.title}")
+        
+    return page
 
+@app.post("/interaction", response_model=InteractionResponseModel)
+async def discord_interaction(req: Request):
+    interaction_response = DiscordInteractionResponse(req)
+    req_body = await req.json()
+    verify = await interaction_response.verify_interaction()
+    if verify is False:
+        raise HTTPException(status_code=401)
+    intType = req_body["type"]
+    int_id = req_body["id"]
+    int_token = req_body["token"]
+    if intType and intType == InteractionType.PING:
+        return InteractionResponseModel(type=InteractionResponseType.PONG, data=dict({}), interaction_id=int_id, interaction_token=int_token)
+    if intType and intType == InteractionType.APPLICATION_COMMAND:
+        req_data = req_body["data"]
+        if req_data and req_data["name"] and req_data["name"] == "lookup":
+            cmd_options = req_data["options"]
+            if cmd_options and len(cmd_options) == 1:
+                opts = cmd_options[0]
+                name = opts["name"]
+                value = opts["value"]
+                if name and name == "slug" and value:
+                    backPg = handle_page_processing(slug=value, discord=True, title_case=False)
+                    if backPg and backPg.embed:
+                        emb = backPg.embed
+                        respData = dict({"embeds": list(emb)})
+                        newResp = InteractionResponseModel(type=InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE, data=respData, interaction_id=int_id, interaction_token=int_token)
+                        return newResp
+                    else:
+                        print("Page creation fail")
+                else:
+                    print("Slug Fail")
+            else:
+                print("Options Fail")
+        else:
+            print("Name lookup failed")
+        newResp = InteractionResponseModel(type=InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, data=dict({}), interaction_id=int_id, interaction_token=int_token)
+        
+        print(f"Application Command: {create_response_url(newResp)} {req_body}")
+        return newResp
+
+    print(f"Verified: {verify}")
+    
+    return InteractionResponseModel(type=InteractionResponseType.PONG, data=dict({}), interaction_id="", interaction_token="")
+
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
+async def read_root():
+    if INDEX_PATH.exists():
+        with open(INDEX_PATH, "r", encoding="utf-8") as f:
+            html_content = f.read()
+        return HTMLResponse(content=html_content)
+    else:
+        # Fallback if file doesn't exist
+        return HTMLResponse(
+            content="<h1>File not found!</h1><p>Please try again.</p>",
+            status_code=404
+        )
+
+@app.get("/page/{slug:path}", response_model=Page, dependencies=[Depends(rate_limit_dependency)])
+async def get_page(
+    slug: str,
+    extract_refs: bool = Query(True),
+    truncate: Optional[int] = Query(None),
+    citations: bool = Query(False),
+    discord: bool = Query(False),
+    title_case: bool = Query(True)
+):
+    
+    page = handle_page_processing(slug, extract_refs, citations, discord, title_case, truncate)
     return page
 
 @app.get("/health", include_in_schema=False)
