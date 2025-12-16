@@ -464,13 +464,6 @@ def handle_discord_processing(slug: str, extract_refs: bool = True, citations: b
         "lastFactCheck": grokDate if grokDate else "N/A",
         "embed": None
     }
-    page = Page(**page_dict)
-    
-    # Cache the new page (evict oldest if at max size)
-    if len(_cache) >= MAX_CACHE_SIZE:
-        _cache.popitem(last=False)  # Evict oldest (FIFO)
-    _cache[cache_key] = (page, now)
-    
     
     discord_clean_txt = discord_content_text.replace("\n\n", " ")
     
@@ -485,7 +478,11 @@ def handle_discord_processing(slug: str, extract_refs: bool = True, citations: b
     
     embed.add_embed_field("Word Count", words)
     embed.add_embed_field("References", refs_count)
-        
+
+    # Cache the new page (evict oldest if at max size)
+    if len(_cache) >= MAX_CACHE_SIZE:
+        _cache.popitem(last=False)  # Evict oldest (FIFO)
+    _cache[cache_key] = (embed, now)
         
     return embed
 
