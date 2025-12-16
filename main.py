@@ -398,6 +398,97 @@ def handle_page_processing(slug: str, extract_refs: bool = True, citations: bool
         
     return page
 
+def handle_discord_processing(slug: str, extract_refs: bool = True, citations: bool= False, title_case:bool = False, truncate: int | None = None) -> DiscordEmbed:
+    slug = normalize_slug(slug, title_case)
+    
+    cache_key = f"{slug}:{extract_refs}:{truncate or 'full'}:{citations}"
+    now = datetime.now()
+    
+    if cache_key in _cache:
+        page, ts = _cache[cache_key]
+        if now - ts > CACHE_TTL:
+            _cache.pop(cache_key)
+        else:
+            return page
+    
+    url = f"{BASE_URL}/page/{urllib.parse.quote(slug)}"
+    
+    resp = requests.get(url, headers={"User-Agent": "Grokipedia-API/0.1"})
+    if resp.status_code != 200:
+        raise HTTPException(status_code=404, detail=f"Not found: {slug}")
+    
+    soup = BeautifulSoup(resp.text, "html.parser")
+    
+    # Clean up: remove unwanted tags, but preserve references div
+    unwanted_tags = ["script", "style", "nav", "header", "footer", "aside"]
+    if not citations:
+        unwanted_tags.append("sup")
+    for tag in soup(unwanted_tags):
+        tag.decompose()
+    
+    content_div = find_content_div(soup)
+    
+    h1 = content_div.find("h1")
+
+
+    page_title = h1.get_text(strip=True) if h1 else slug.replace("_", " ")
+    
+    content_text = re.sub(r'\n{3,}', '\n\n', content_div.get_text(separator="\n\n", strip=True))
+
+    grokDate = grok_date(content_div)
+    # Remove the "Last Fact Checked" from Content
+    gdl = len(grokDate)
+    content_text = content_text[gdl:]
+    # Remove the title from body
+    tl = len(page_title)+2
+    content_text = content_text[tl:]
+
+    if truncate:
+        content_text = content_text[:truncate]
+    
+    discord_content_text = content_text[:500]
+    
+    words = len(re.split(r'\s+', content_text.strip()))
+    
+    references, refs_count = extract_references(soup) if extract_refs else ([], 0)
+    
+    page_dict = {
+        "title": page_title,
+        "slug": slug,
+        "url": url,
+        "content_text": content_text,
+        "char_count": len(content_text),
+        "word_count": words,
+        "references_count": refs_count,
+        "references": references,
+        "lastFactCheck": grokDate if grokDate else "N/A",
+        "embed": None
+    }
+    page = Page(**page_dict)
+    
+    # Cache the new page (evict oldest if at max size)
+    if len(_cache) >= MAX_CACHE_SIZE:
+        _cache.popitem(last=False)  # Evict oldest (FIFO)
+    _cache[cache_key] = (page, now)
+    
+    
+    discord_clean_txt = discord_content_text.replace("\n\n", " ")
+    
+    embed = DiscordEmbed(title=page_title, description=discord_clean_txt, color="03b2f8")
+    embed.set_thumbnail(url="https://images-ext-1.discordapp.net/external/ArUio-9FyAik8zLqdBDPhiNbQt1ozYbSL0FYvUaXXAQ/https/grokipedia.com/icon-512x512.png?format=webp&quality=lossless")
+    embed.set_author(name="Grokipedia", url=url, icon_url="https://images-ext-1.discordapp.net/external/ArUio-9FyAik8zLqdBDPhiNbQt1ozYbSL0FYvUaXXAQ/https/grokipedia.com/icon-512x512.png?format=webp&quality=lossless")
+    embed.set_timestamp()
+    embed.set_url(url)
+    embed.set_footer(text=f"{page_title} entry from Grokipedia")
+    
+    factCheckField(embed, page_dict["lastFactCheck"])
+    
+    embed.add_embed_field("Word Count", words)
+    embed.add_embed_field("References", refs_count)
+        
+        
+    return embed
+
 @app.post("/interaction", response_model=InteractionResponseModel)
 async def discord_interaction(req: Request):
     interaction_response = DiscordInteractionResponse(req)
@@ -420,11 +511,11 @@ async def discord_interaction(req: Request):
                 name = opts["name"]
                 value = opts["value"]
                 if name and name == "slug" and value:
-                    backPg = handle_page_processing(slug=value, discord=True, title_case=False)
-                    if backPg and backPg.embed:
-                        emb = backPg.embed
+                    backPg = handle_discord_processing(slug=value, title_case=False)
+                    if backPg:
+                        
                         embList = list()
-                        embList.append(emb)
+                        embList.append(backPg)
                         respData = dict({"embeds": embList})
                         newResp = InteractionResponseModel(type=InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE, data=respData, interaction_id=int_id, interaction_token=int_token)
                         print(f"Made it to final: {newResp}")
