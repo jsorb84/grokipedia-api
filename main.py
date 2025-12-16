@@ -261,8 +261,9 @@ class DiscordInteractionResponse(JSONResponse):
         
     def pong(self):
         req_type = self.request.get("type")
+        print(req_type)
         # Handle Ping
-        if req_type and (req_type == 1 or req_type == "1"):
+        if req_type == 1:
             self.status_code = 204
     
     def setup_agent_header(self):
@@ -289,6 +290,7 @@ async def discord_interaction(req: Request):
     interaction_response = DiscordInteractionResponse(req)
     verify = await interaction_response.verify_interaction()
     print(f"Verified: {verify}")
+    print(req)
     return interaction_response
     
     
