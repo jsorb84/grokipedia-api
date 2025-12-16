@@ -7,6 +7,7 @@ from pydantic import BaseModel, TypeAdapter
 from nacl.signing import VerifyKey
 from nacl.exceptions import BadSignatureError
 from typing import Optional, List
+import json
 from bs4 import BeautifulSoup
 import requests
 from discord_interactions import verify_key_decorator, InteractionType, InteractionResponseType
@@ -422,7 +423,7 @@ async def discord_interaction(req: Request):
                     backPg = handle_page_processing(slug=value, discord=True, title_case=False)
                     if backPg and backPg.embed:
                         emb = backPg.embed
-                        respData = dict({"embeds": list(emb.items())})
+                        respData = dict({"embeds": list(json.dumps(emb))})
                         newResp = InteractionResponseModel(type=InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE, data=respData, interaction_id=int_id, interaction_token=int_token)
                         print(f"Made it to final: {newResp}")
                         return newResp
