@@ -259,7 +259,8 @@ class DiscordInteractionResponse(JSONResponse):
         req_type = self.request.get("type", None)
         # Handle Ping
         if req_type == 1:
-            self.status_code = 204
+            self.body = self.render({"type": 1})
+            self.status_code = 200
         else:
             self.status_code == 400
     
