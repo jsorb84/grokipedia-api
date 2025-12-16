@@ -252,7 +252,7 @@ class DiscordInteractionResponse(JSONResponse):
         self.request = req
         
         self.setup_agent_header()
-        print(body)
+        
         
         
     def pong(self):
