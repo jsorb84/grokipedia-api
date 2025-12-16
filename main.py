@@ -283,18 +283,21 @@ class DiscordInteractionResponse(JSONResponse):
             self.status_code = 401
             return False
 
-@app.post("/interaction", response_class=DiscordInteractionResponse)
+@app.post("/interaction", response_class=JSONResponse)
 async def discord_interaction(req: Request):
     
     
     interaction_response = DiscordInteractionResponse(req)
+    req_body = await req.json()
     verify = await interaction_response.verify_interaction()
-    intType = interaction_response.request_body["type"]
+    if verify is False:
+        return JSONResponse(None, 401)
+    intType = req_body["type"]
     if intType and intType == 1:
-        interaction_response.pong()
+        return JSONResponse({"type": 1})
     print(f"Verified: {verify}")
    
-    return interaction_response
+    return JSONResponse({}, 200)
     
     
         
