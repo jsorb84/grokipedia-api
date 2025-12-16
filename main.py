@@ -251,20 +251,25 @@ class DiscordInteractionResponse(JSONResponse):
     interaction: Interaction | None = None
     response: InteractionResponse | None = None
     request: Request | None = None
-    def __init__(self, req: Request, **kwargs):
+    request_body: any | None = None
+    def __init__(self, req: Request, body: any, **kwargs):
         super().__init__(kwargs.get("content", {}), kwargs.get("status_code", 200), kwargs.get("headers", None), kwargs.get("media_type", "application/json"), kwargs.get("background", None))
         self.request = req
+        self.request_body = body
         self.setup_agent_header()
-        req_type = self.request.get("type")
+        print(body)
+        req_type = body["type"] if body["type"] else None
         if req_type == 1:
             self.pong()
         
     def pong(self):
-        req_type = self.request.get("type")
-        print(req_type)
+        req_type = self.request_body["type"] if self.request_body["type"] else None
+        
         # Handle Ping
         if req_type == 1:
             self.status_code = 204
+        else:
+            self.status_code == 400
     
     def setup_agent_header(self):
         vercel_url = "grokipedia-api-nu.vercel.app"
@@ -287,7 +292,9 @@ class DiscordInteractionResponse(JSONResponse):
 
 @app.post("/interaction", response_class=DiscordInteractionResponse)
 async def discord_interaction(req: Request):
-    interaction_response = DiscordInteractionResponse(req)
+    body = await req.json()
+    
+    interaction_response = DiscordInteractionResponse(req, body)
     verify = await interaction_response.verify_interaction()
     print(f"Verified: {verify}")
     print(req)
