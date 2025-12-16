@@ -413,6 +413,7 @@ async def discord_interaction(req: Request):
         req_data = req_body["data"]
         if req_data and req_data["name"] and req_data["name"] == "lookup":
             cmd_options = req_data["options"]
+            print(cmd_options)
             if cmd_options and len(cmd_options) == 1:
                 opts = cmd_options[0]
                 name = opts["name"]
@@ -423,6 +424,7 @@ async def discord_interaction(req: Request):
                         emb = backPg.embed
                         respData = dict({"embeds": list(emb)})
                         newResp = InteractionResponseModel(type=InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE, data=respData, interaction_id=int_id, interaction_token=int_token)
+                        print(f"Made it to final: {newResp}")
                         return newResp
                     else:
                         print("Page creation fail")
@@ -433,7 +435,7 @@ async def discord_interaction(req: Request):
         else:
             print("Name lookup failed")
         newResp = InteractionResponseModel(type=InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, data=dict({}), interaction_id=int_id, interaction_token=int_token)
-        
+        print(newResp)
         print(f"Application Command: {create_response_url(newResp)} {req_body}")
         return newResp
 
