@@ -9,7 +9,7 @@ from nacl.exceptions import BadSignatureError
 from typing import Optional, List
 from bs4 import BeautifulSoup
 import requests
-from discord.interactions import InteractionResponse, InteractionResponseType, Interaction
+from discord.interactions import InteractionResponse, InteractionResponseType, Interaction, InteractionPayload, ApplicationCommandInteractionData
 import discord as d
 import re
 import urllib.parse
@@ -283,6 +283,8 @@ class DiscordInteractionResponse(JSONResponse):
             self.status_code = 401
             return False
 
+
+
 @app.post("/interaction", response_class=JSONResponse)
 async def discord_interaction(req: Request):
     
@@ -296,7 +298,9 @@ async def discord_interaction(req: Request):
     if intType and intType == 1:
         return JSONResponse({"type": 1})
     print(f"Verified: {verify}")
-   
+    
+    myInt = Interaction(data=req_body)
+    print(myInt.data.values())
     return JSONResponse({}, 200)
     
     
