@@ -263,7 +263,7 @@ class DiscordInteractionResponse(JSONResponse):
         req_type = self.request.get("type")
         # Handle Ping
         if req_type and (req_type == 1 or req_type == "1"):
-            self.body = self.render({"type": 1, "data": {}})
+            self.status_code = 204
     
     def setup_agent_header(self):
         vercel_url = "grokipedia-api-nu.vercel.app"
