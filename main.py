@@ -515,7 +515,7 @@ async def discord_interaction(req: Request):
                     if backPg:
                         
                         embList = list()
-                        embList.append(backPg)
+                        embList.append(backPg.__dict__ if isinstance(backPg, DiscordEmbed) else backPg)
                         respData = dict({"embeds": embList})
                         newResp = InteractionResponseModel(type=InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE, data=respData, interaction_id=int_id, interaction_token=int_token)
                         print(f"Made it to final: {newResp}")
