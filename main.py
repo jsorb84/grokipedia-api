@@ -9,8 +9,8 @@ from nacl.exceptions import BadSignatureError
 from typing import Optional, List
 from bs4 import BeautifulSoup
 import requests
-from discord.interactions import InteractionResponse, InteractionResponseType, Interaction
-import discord as d
+from discord_interactions import verify_key_decorator, InteractionType, InteractionResponseType
+
 import re
 import urllib.parse
 from datetime import datetime, timedelta
@@ -20,6 +20,8 @@ import sys
 from collections import defaultdict
 import time
 import discord.embeds as embeds
+
+from interactions import Client, Intents, listen
 import os
 from typing import Dict, TypedDict, Type, Tuple
 
@@ -243,8 +245,7 @@ def factCheckField(embed: DiscordEmbed, lfcStr: str) -> None:
         embed.add_embed_field("Last Checked", "Unknown")
 
 class DiscordInteractionResponse(JSONResponse):
-    interaction: Interaction | None = None
-    response: InteractionResponse | None = None
+    
     request: Request | None = None
     request_body = None
     def __init__(self, req: Request, **kwargs):
@@ -283,9 +284,18 @@ class DiscordInteractionResponse(JSONResponse):
             self.status_code = 401
             return False
 
+class InteractionResponseModel(BaseModel):
+    interaction_id: str
+    interaction_token: str
+    type: int
+    data: Optional[Dict]
 
 
-@app.post("/interaction", response_class=JSONResponse)
+def create_response_url(resp: InteractionResponseModel) -> str:
+    blank = f"https://discord.com/api/v10/interactions/{resp.interaction_id}/{resp.interaction_token}/callback"
+    return blank
+
+@app.post("/interaction", response_model=InteractionResponseModel)
 async def discord_interaction(req: Request):
     
     
@@ -293,15 +303,20 @@ async def discord_interaction(req: Request):
     req_body = await req.json()
     verify = await interaction_response.verify_interaction()
     if verify is False:
-        return JSONResponse(None, 401)
+        raise HTTPException(status_code=401)
     intType = req_body["type"]
-    if intType and intType == 1:
-        return JSONResponse({"type": 1})
+    int_id = req_body["id"]
+    int_token = req_body["token"]
+    if intType and intType == InteractionType.PING:
+        return InteractionResponseModel(type=InteractionResponseType.PONG, data=dict({}), interaction_id=int_id, interaction_token=int_token)
+    if intType and intType == InteractionType.APPLICATION_COMMAND:
+        newResp = InteractionResponseModel(type=InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, data=dict({}), interaction_id=int_id, interaction_token=int_token)
+        print(f"Application Command: {create_response_url(newResp)} {req_body}")
+        return newResp
+
     print(f"Verified: {verify}")
     
-    myInt = Interaction(data=req_body)
-    print(myInt.data.values())
-    return JSONResponse({}, 200)
+    return InteractionResponseModel(type=InteractionResponseType.PONG, data=dict({}), interaction_id="", interaction_token="")
     
     
         
