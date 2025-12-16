@@ -422,7 +422,7 @@ async def discord_interaction(req: Request):
                     backPg = handle_page_processing(slug=value, discord=True, title_case=False)
                     if backPg and backPg.embed:
                         emb = backPg.embed
-                        respData = dict({"embeds": list(emb)})
+                        respData = dict({"embeds": list(emb.items())})
                         newResp = InteractionResponseModel(type=InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE, data=respData, interaction_id=int_id, interaction_token=int_token)
                         print(f"Made it to final: {newResp}")
                         return newResp
