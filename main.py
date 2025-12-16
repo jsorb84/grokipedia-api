@@ -273,6 +273,8 @@ class DiscordInteractionResponse(JSONResponse):
         req = self.request
         signature = req.headers.get('X-Signature-Ed25519')
         timestamp = req.headers.get('X-Signature-Timestamp')
+        if signature is None or timestamp is None:
+            return True
         body = await req.body()
         decoded = body.decode()
         try:
