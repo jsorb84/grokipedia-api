@@ -287,9 +287,9 @@ async def discord_interaction(req: Request):
     body = await req.json()
     
     interaction_response = DiscordInteractionResponse(req, body)
+    interaction_response.pong()
     verify = await interaction_response.verify_interaction()
     print(f"Verified: {verify}")
-    interaction_response.pong()
     print(req)
     return interaction_response
     
