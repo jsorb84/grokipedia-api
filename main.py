@@ -9,7 +9,7 @@ from nacl.exceptions import BadSignatureError
 from typing import Optional, List
 from bs4 import BeautifulSoup
 import requests
-from discord.interactions import InteractionResponse, InteractionResponseType, Interaction, InteractionPayload, ApplicationCommandInteractionData
+from discord.interactions import InteractionResponse, InteractionResponseType, Interaction
 import discord as d
 import re
 import urllib.parse
