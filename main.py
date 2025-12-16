@@ -248,7 +248,7 @@ class DiscordInteractionResponse(JSONResponse):
     request: Request | None = None
     request_body = None
     def __init__(self, req: Request, **kwargs):
-        super().__init__(kwargs.get("content", {}), kwargs.get("status_code", 200), kwargs.get("headers", None), kwargs.get("media_type", "application/json"), kwargs.get("background", None))
+        super().__init__(kwargs.get("content", dict({})), kwargs.get("status_code", 200), kwargs.get("headers", None), kwargs.get("media_type", "application/json"), kwargs.get("background", None))
         self.request = req
         
         self.setup_agent_header()
@@ -259,8 +259,11 @@ class DiscordInteractionResponse(JSONResponse):
         req_type = self.request.get("type", None)
         # Handle Ping
         if req_type == 1:
-            self.body = self.render({"type": 1})
+            self.body = self.render(dict({"type": 1}))
             self.status_code = 200
+            print("Body edited")
+        else:
+            print("Not request type 1")
     
     def setup_agent_header(self):
         vercel_url = "grokipedia-api-nu.vercel.app"
@@ -271,7 +274,8 @@ class DiscordInteractionResponse(JSONResponse):
         signature = req.headers.get('X-Signature-Ed25519')
         timestamp = req.headers.get('X-Signature-Timestamp')
         if signature is None or timestamp is None:
-            return True
+            self.status_code = 401
+            return False
         body = await req.body()
         body_json = await req.json()
         self.request_body = body_json
@@ -293,7 +297,7 @@ async def discord_interaction(req: Request):
     if req.get("type") and req.get("type") == 1:
         interaction_response.pong()
     print(f"Verified: {verify}")
-    print(req)
+   
     return interaction_response
     
     
