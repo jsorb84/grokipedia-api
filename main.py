@@ -19,9 +19,7 @@ from pathlib import Path
 import sys
 from collections import defaultdict
 import time
-import discord.embeds as embeds
 
-from interactions import Client, Intents, listen
 import os
 from typing import Dict, TypedDict, Type, Tuple
 
