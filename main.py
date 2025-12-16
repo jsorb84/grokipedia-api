@@ -10,6 +10,7 @@ from typing import Optional, List
 from bs4 import BeautifulSoup
 import requests
 from discord.interactions import InteractionResponse, InteractionResponseType, Interaction
+import discord as d
 import re
 import urllib.parse
 from datetime import datetime, timedelta
@@ -25,6 +26,7 @@ from typing import Dict, TypedDict, Type, Tuple
 from dotenv import load_dotenv
 from discord_webhook import DiscordWebhook, DiscordEmbed
 
+
 # Load environment variables from .env file
 load_dotenv()  # Add this line to load .env
 
@@ -35,14 +37,7 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc"
 )
-#  "title": page_title,
-#             "description": discord_clean_txt,
-#             "color": "03b2f8",
-#             "thumbnailUrl": "https://images-ext-1.discordapp.net/external/ArUio-9FyAik8zLqdBDPhiNbQt1ozYbSL0FYvUaXXAQ/https/grokipedia.com/icon-512x512.png?format=webp&quality=lossless",
-#             "authorName": "Grokipedia",
-#             "authorUrl": url,
-#             "authorIconUrl": "https://images-ext-1.discordapp.net/external/ArUio-9FyAik8zLqdBDPhiNbQt1ozYbSL0FYvUaXXAQ/https/grokipedia.com/icon-512x512.png?format=webp&quality=lossless",
-#             "lastFactCheck": page_dict["lastFactCheck"]
+
 class EmbedData(TypedDict):
     title: str
     description: str
@@ -258,13 +253,10 @@ class DiscordInteractionResponse(JSONResponse):
         self.request_body = body
         self.setup_agent_header()
         print(body)
-        req_type = body["type"] if body["type"] else None
-        if req_type == 1:
-            self.pong()
+        
         
     def pong(self):
-        req_type = self.request_body["type"] if self.request_body["type"] else None
-        
+        req_type = self.request.get("type", None)
         # Handle Ping
         if req_type == 1:
             self.status_code = 204
@@ -284,7 +276,7 @@ class DiscordInteractionResponse(JSONResponse):
         body = await req.body()
         decoded = body.decode()
         try:
-            verified = verify_key.verify((f"{timestamp}{body}").encode(), bytes.fromhex(signature))
+            verified = verify_key.verify((f"{timestamp}{decoded}").encode(), bytes.fromhex(signature))
             return True
         except BadSignatureError:
             self.status_code = 401
@@ -297,6 +289,7 @@ async def discord_interaction(req: Request):
     interaction_response = DiscordInteractionResponse(req, body)
     verify = await interaction_response.verify_interaction()
     print(f"Verified: {verify}")
+    interaction_response.pong()
     print(req)
     return interaction_response
     
