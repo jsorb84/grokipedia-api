@@ -256,14 +256,9 @@ class DiscordInteractionResponse(JSONResponse):
         
         
     def pong(self):
-        req_type = self.request.get("type", None)
-        # Handle Ping
-        if req_type == 1:
-            self.body = self.render(dict({"type": 1}))
-            self.status_code = 200
-            print("Body edited")
-        else:
-            print("Not request type 1")
+        self.body = self.render(dict({"type": 1}))
+        
+        print("Body edited")
     
     def setup_agent_header(self):
         vercel_url = "grokipedia-api-nu.vercel.app"
@@ -294,7 +289,8 @@ async def discord_interaction(req: Request):
     
     interaction_response = DiscordInteractionResponse(req)
     verify = await interaction_response.verify_interaction()
-    if req.get("type") and req.get("type") == 1:
+    intType = interaction_response.request_body["type"]
+    if intType and intType == 1:
         interaction_response.pong()
     print(f"Verified: {verify}")
    
