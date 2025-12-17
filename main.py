@@ -3,12 +3,12 @@ from api_analytics.fastapi import Analytics
 from fastapi import FastAPI, HTTPException, Query, Request, Depends
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, TypeAdapter
+from pydantic import BaseModel, TypeAdapter, dataclasses
 from nacl.signing import VerifyKey
 from nacl.exceptions import BadSignatureError
 from typing import Optional, List
 
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 import requests
 from discord_interactions import verify_key_decorator, InteractionType, InteractionResponseType
 
@@ -73,6 +73,8 @@ BASE_URL = "https://grokipedia.com"
 _cache = {}
 MAX_CACHE_SIZE = 1000  # Adjust as needed; keeps cache small (~50MB assuming avg 50KB/page)
 CACHE_TTL = timedelta(days=2)
+
+
 
 # Rate limiting setup
 request_times = defaultdict(list)
@@ -295,6 +297,27 @@ def create_response_url(resp: InteractionResponseModel) -> str:
     return blank
 
 
+class ArticleSection:
+    id: str
+    title: str
+    tag: Tag | None = None
+    def __init__(self, tag: Tag):
+        self.tag = tag
+        self.id = tag.get("id", None)
+        if self.id is None:
+            print("No ID Found")
+        self.get_title()
+    def get_title(self):
+        inner_text = self.tag.get_text(strip=True)
+        if inner_text is None or inner_text == "":
+            print("Error finding Title")
+        else:
+            print(f"Title: {inner_text}")
+            self.title = inner_text
+
+class GrokipediaDiscordReturn(TypedDict):
+    embed: DiscordEmbed
+    article_sections: List[ArticleSection] = list()
     
 def handle_page_processing(slug: str, extract_refs: bool = True, citations: bool= False, discord:bool = False, title_case:bool = False, truncate: int | None = None) -> Page:
     slug = normalize_slug(slug, title_case)
@@ -398,7 +421,7 @@ def handle_page_processing(slug: str, extract_refs: bool = True, citations: bool
         
     return page
 
-def handle_discord_processing(slug: str, extract_refs: bool = True, citations: bool= False, title_case:bool = False, truncate: int | None = None) -> DiscordEmbed:
+def handle_discord_processing(slug: str, extract_refs: bool = True, citations: bool= False, title_case:bool = False, truncate: int | None = None) -> GrokipediaDiscordReturn:
     slug = normalize_slug(slug, title_case)
     
     cache_key = f"{slug}:{extract_refs}:{truncate or 'full'}:{citations}"
@@ -429,6 +452,11 @@ def handle_discord_processing(slug: str, extract_refs: bool = True, citations: b
     content_div = find_content_div(soup)
     
     h1 = content_div.find("h1")
+    h2 = content_div.find_all("h2")
+    h2_sections = list()
+    for h2_tag in h2:
+        a_section = ArticleSection(tag=h2_tag)
+        h2_sections.append(a_section)
 
 
     page_title = h1.get_text(strip=True) if h1 else slug.replace("_", " ")
@@ -479,12 +507,14 @@ def handle_discord_processing(slug: str, extract_refs: bool = True, citations: b
     embed.add_embed_field("Word Count", words)
     embed.add_embed_field("References", refs_count)
 
+    gdr = GrokipediaDiscordReturn(embed=embed, article_sections=h2_sections)
+
     # Cache the new page (evict oldest if at max size)
     if len(_cache) >= MAX_CACHE_SIZE:
         _cache.popitem(last=False)  # Evict oldest (FIFO)
     _cache[cache_key] = (embed, now)
         
-    return embed
+    return gdr
 
 @app.post("/interaction", response_model=InteractionResponseModel)
 async def discord_interaction(req: Request):
@@ -512,7 +542,10 @@ async def discord_interaction(req: Request):
                     if backPg:
                         
                         embList = list()
-                        embList.append(backPg.__dict__ if isinstance(backPg, DiscordEmbed) else backPg)
+                        embDict = backPg["embed"]
+                        sections = backPg["article_sections"]
+                        print(sections)
+                        embList.append(embDict.__dict__ if isinstance(embDict, DiscordEmbed) else embDict)
                         respData = dict({"embeds": embList})
                         newResp = InteractionResponseModel(type=InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE, data=respData, interaction_id=int_id, interaction_token=int_token)
                         print(f"Made it to final: {newResp}")
