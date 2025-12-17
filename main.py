@@ -454,27 +454,27 @@ def handle_discord_processing(slug: str, extract_refs: bool = True, citations: b
     content_div = find_content_div(soup)
     
     h1 = content_div.find("h1")
-    h2 = content_div.find_all(["h2", "span", "h3"])
+    h2 = content_div.find_all("h2")
     h2_sections: List[ArticleSection] = list()
-    old_section = 0
+    
     for h2_tag in h2:
         if h2_tag.name == "h2":
             a_section = ArticleSection(tag=h2_tag)
             h2_sections.append(a_section)
-            old_section += 1
-        if h2_tag.name == "h3":
-            parent_h2 = h2_sections[old_section-1]
-            if parent_h2 is None:
-                return
-            parent_h2.sub_sections.append(h2_tag.get_text(strip=True))
-        if h2_tag.name == "span":
-            parent_h2 = h2_sections[old_section-1]
-            if parent_h2 is None:
-                return
-            span_class = h2_tag.get("class")
-            if span_class is None:
-                return
-            parent_h2.inner_content += re.sub(r'\n{3,}', '\n\n', h2_tag.get_text(separator="\n\n", strip=True))
+            
+        # if h2_tag.name == "h3":
+        #     parent_h2 = h2_sections[old_section-1]
+        #     if parent_h2 is None:
+        #         return
+        #     parent_h2.sub_sections.append(h2_tag.get_text(strip=True))
+        # if h2_tag.name == "span":
+        #     parent_h2 = h2_sections[old_section-1]
+        #     if parent_h2 is None:
+        #         return
+        #     span_class = h2_tag.get("class")
+        #     if span_class is None:
+        #         return
+        #     parent_h2.inner_content += re.sub(r'\n{3,}', '\n\n', h2_tag.get_text(separator="\n\n", strip=True))
 
 
     page_title = h1.get_text(strip=True) if h1 else slug.replace("_", " ")
