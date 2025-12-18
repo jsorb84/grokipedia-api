@@ -4,10 +4,12 @@ from fastapi import FastAPI, HTTPException, Query, Request, Depends
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, TypeAdapter, dataclasses
+from enum import Enum
 from nacl.signing import VerifyKey
 from nacl.exceptions import BadSignatureError
 from typing import Optional, List
-
+import discord.components as components
+import discord.ui as dui
 from bs4 import BeautifulSoup, Tag
 import requests
 from discord_interactions import verify_key_decorator, InteractionType, InteractionResponseType
@@ -99,11 +101,138 @@ def rate_limit_dependency(request: Request):
         )
     request_times[client_ip].append(now)
 
+class ArticleSubSection:
+    """
+    Represents a H3 Section
+    """
+    id: str
+    title: str
+    h3_tag: Tag
+    parent_h2_tag: Tag
+    inner_content: str = ""
+
+    def __init__(self, h3tag: Tag, parent: Tag):
+        self.h3_tag = h3tag
+        self.parent_h2_tag = parent
+        self.id = h3tag.get("id", None)
+        if self.id is None:
+            print("No ID Found")
+        self.get_title()
+        self.handle_get_txt()
+    def get_title(self):
+        inner_text = self.h3_tag.get_text(strip=True)
+        if inner_text is None or inner_text == "":
+            print("Error finding Title")
+        else:
+            #print(f"Title: {inner_text}")
+            self.title = inner_text
+    def check(self, against: Tag) -> bool:
+        check_h3 = against.find_previous_sibling("h3")
+        check_h2 = against.find_previous_sibling("h2")
+        if check_h3 is not self.h3_tag:
+            print("Failed H3 Check in Subsection")
+            return False
+        if check_h2 is not self.parent_h2_tag:
+            print("Failed Parent Check in Subsection")
+            return False
+        return True
+    def handle_get_txt(self):
+        for sibling in self.h3_tag.next_siblings:
+            if not isinstance(sibling, Tag):
+                continue 
+            if sibling.name in {"h2", "h3"}:
+                # If h2 section is finished
+                break 
+            if sibling.name == "span" and sibling.attrs.get("class", None) is not None:
+                check = self.check(sibling)
+                if check is False:
+                    print("Failed Check Function")
+                    break
+                txt_content = sibling.get_text(separator="", strip=True)
+                self.inner_content += txt_content
+                
+    def __str__(self):
+        return self.inner_content
+
+class SectionType(Enum):
+    section = 2
+    subsection = 3
+
+class Section(BaseModel):
+    section_type: SectionType
+    title: str
+    id: str
+    content: str
+    subsections: List[Dict]
+
+class ArticleSection:
+    """
+    Represents a H2 Section /w H3 Subsections
+    """
+    id: str
+    title: str
+    
+    h2_tag: Tag
+    sub_sections: List[ArticleSubSection] | None = None
+    inner_content: str = ""
+    def __init__(self, h2tag: Tag):
+        self.h2_tag = h2tag
+        self.id = h2tag.get("id", None)
+        self.sub_sections = []
+        if self.id is None:
+            print("No ID Found")
+        self.get_title()
+        self.handle_get_txt()
+    def get_title(self):
+        inner_text = self.h2_tag.get_text(strip=True)
+        if inner_text is None or inner_text == "":
+            print("Error finding Title")
+        else:
+            #print(f"Title: {inner_text}")
+            self.title = inner_text
+    def to_model(self) -> Section:
+        sub_sections = []
+        for section in self.sub_sections:
+            s_sec = Section(section_type=SectionType.subsection, title=section.title, id=section.id, content=section.inner_content, subsections=[])
+            sub_sections.append(s_sec.model_dump())
+        self_section = Section(section_type=SectionType.section, title=self.title, id=self.id, content=self.inner_content, subsections=sub_sections)
+        return self_section
+    def handle_get_txt(self):
+        
+        for sibling in self.h2_tag.next_siblings:
+            if not isinstance(sibling, Tag):
+                continue 
+            if sibling.name in {"h2", "h4", "h5"}:
+                # If h2 section is finished
+                print(f"Break out at {sibling.name} on {self.title}")
+                break 
+            if sibling.name == "h3":
+                check_h2 = sibling.find_previous_sibling("h2")
+                if check_h2 is not self.h2_tag:
+                    print("Failed H2 Check")
+                    break
+                new_h3 = ArticleSubSection(sibling, self.h2_tag)
+                print(f"Previous {self.id}: {len(self.sub_sections)}")
+                self.sub_sections.append(new_h3)
+                #print(f"New Subsection on Section: {self.title}, Subsection {new_h3.title}")
+                
+            if sibling.name == "span" and sibling.attrs.get("class", None) is not None:
+                check_h2 = sibling.find_previous_sibling("h2")
+                if check_h2 is not self.h2_tag:
+                    print("Failed H2 Check in Span Section")
+                    break
+                txt_content = sibling.get_text(separator=" ", strip=True)
+                self.inner_content += txt_content
+                
+    def __str__(self):
+        return self.inner_content
+
+
 class Reference(BaseModel):
     number: int
     url: str = ""
 
-
+Sections = TypeAdapter[ArticleSection]
 class Page(BaseModel):
     title: str
     slug: str
@@ -115,6 +244,7 @@ class Page(BaseModel):
     references_count: int
     references: Optional[List[Reference]] = None
     embed: EmbedData | None = None
+    sections: List[Section] = []
 
 
 def normalize_slug(input_str: str, title_case: bool = True) -> str:
@@ -297,29 +427,9 @@ def create_response_url(resp: InteractionResponseModel) -> str:
     return blank
 
 
-class ArticleSection:
-    id: str
-    title: str
-    tag: Tag | None = None
-    sub_sections: List[str] = list()
-    inner_content: str = ""
-    def __init__(self, tag: Tag):
-        self.tag = tag
-        self.id = tag.get("id", None)
-        if self.id is None:
-            print("No ID Found")
-        self.get_title()
-    def get_title(self):
-        inner_text = self.tag.get_text(strip=True)
-        if inner_text is None or inner_text == "":
-            print("Error finding Title")
-        else:
-            print(f"Title: {inner_text}")
-            self.title = inner_text
-
 class GrokipediaDiscordReturn(TypedDict):
     embed: DiscordEmbed
-    article_sections: List[ArticleSection] = list()
+    article_sections: List[Section] = list()
     
 def handle_page_processing(slug: str, extract_refs: bool = True, citations: bool= False, discord:bool = False, title_case:bool = False, truncate: int | None = None) -> Page:
     slug = normalize_slug(slug, title_case)
@@ -352,8 +462,12 @@ def handle_page_processing(slug: str, extract_refs: bool = True, citations: bool
     content_div = find_content_div(soup)
     
     h1 = content_div.find("h1")
-
-
+    subsections = content_div.find_all("h2")
+    h2_sections: List[Section] = list()
+    for section in subsections:
+        h2_sections.append(ArticleSection(section).to_model())
+    
+    
     page_title = h1.get_text(strip=True) if h1 else slug.replace("_", " ")
     
     content_text = re.sub(r'\n{3,}', '\n\n', content_div.get_text(separator="\n\n", strip=True))
@@ -385,7 +499,8 @@ def handle_page_processing(slug: str, extract_refs: bool = True, citations: bool
         "references_count": refs_count,
         "references": references,
         "lastFactCheck": grokDate if grokDate else "N/A",
-        "embed": None
+        "embed": None,
+        "sections": h2_sections
     }
     page = Page(**page_dict)
     
@@ -454,27 +569,12 @@ def handle_discord_processing(slug: str, extract_refs: bool = True, citations: b
     content_div = find_content_div(soup)
     
     h1 = content_div.find("h1")
-    h2 = content_div.find_all("h2")
-    h2_sections: List[ArticleSection] = list()
+    subsections = content_div.find_all("h2")
+    h2_sections: List[Section] = list()
+    for section in subsections:
+        h2_sections.append(ArticleSection(section).to_model())
     
-    for h2_tag in h2:
-        if h2_tag.name == "h2":
-            a_section = ArticleSection(tag=h2_tag)
-            h2_sections.append(a_section)
-            
-        # if h2_tag.name == "h3":
-        #     parent_h2 = h2_sections[old_section-1]
-        #     if parent_h2 is None:
-        #         return
-        #     parent_h2.sub_sections.append(h2_tag.get_text(strip=True))
-        # if h2_tag.name == "span":
-        #     parent_h2 = h2_sections[old_section-1]
-        #     if parent_h2 is None:
-        #         return
-        #     span_class = h2_tag.get("class")
-        #     if span_class is None:
-        #         return
-        #     parent_h2.inner_content += re.sub(r'\n{3,}', '\n\n', h2_tag.get_text(separator="\n\n", strip=True))
+    
 
 
     page_title = h1.get_text(strip=True) if h1 else slug.replace("_", " ")
@@ -562,9 +662,14 @@ async def discord_interaction(req: Request):
                         embList = list()
                         embDict = backPg["embed"]
                         sections = backPg["article_sections"]
+                        select_options: List[components.SelectOption] = []
+                        for sect in sections:
+                            select_options.append(components.SelectOption(label=sect.title, value=sect.id))
+                        select_menu = dui.Select(custom_id=value, placeholder="Sections", min_values=1, max_values=len(sections), options=select_options)
+                        
                         print(sections)
                         embList.append(embDict.__dict__ if isinstance(embDict, DiscordEmbed) else embDict)
-                        respData = dict({"embeds": embList})
+                        respData = dict({"embeds": embList, "components": [select_menu.to_component_dict()]})
                         newResp = InteractionResponseModel(type=InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE, data=respData, interaction_id=int_id, interaction_token=int_token)
                         print(f"Made it to final: {newResp}")
                         return newResp
@@ -585,6 +690,7 @@ async def discord_interaction(req: Request):
     
     return InteractionResponseModel(type=InteractionResponseType.PONG, data=dict({}), interaction_id="", interaction_token="")
 
+
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def read_root():
     if INDEX_PATH.exists():
@@ -597,6 +703,8 @@ async def read_root():
             content="<h1>File not found!</h1><p>Please try again.</p>",
             status_code=404
         )
+
+
 
 @app.get("/page/{slug:path}", response_model=Page, dependencies=[Depends(rate_limit_dependency)])
 async def get_page(
