@@ -662,17 +662,22 @@ async def discord_interaction(req: Request):
                         embList = list()
                         embDict = backPg["embed"]
                         sections = backPg["article_sections"]
-                        select_options: List[components.SelectOption] = []
-                        for sect in sections:
-                            select_options.append(components.SelectOption(label=sect.title, value=sect.id))
-                        select_menu = dui.Select(custom_id=value, placeholder="Sections", min_values=1, max_values=len(sections), options=select_options)
-                        
-                        print(sections)
-                        embList.append(embDict.__dict__ if isinstance(embDict, DiscordEmbed) else embDict)
-                        respData = dict({"embeds": embList, "components": [select_menu.to_component_dict()]})
-                        newResp = InteractionResponseModel(type=InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE, data=respData, interaction_id=int_id, interaction_token=int_token)
-                        print(f"Made it to final: {newResp}")
-                        return newResp
+                        if isinstance(embDict, DiscordEmbed) is True and isinstance(sections, List):
+                            select_options: List[components.SelectOption] = []
+                            for sect in sections:
+                                select_options.append(components.SelectOption(label=sect.title, value=sect.id))
+                            select_menu = dui.Select(custom_id=value, placeholder="Sections", min_values=1, max_values=len(sections), options=select_options)
+                            action_row = dui.ActionRow(select_menu)
+                            
+                            
+                            embList.append(embDict.__dict__ if isinstance(embDict, DiscordEmbed) else embDict)
+                            respData = dict({"embeds": embList, "components": list(action_row.to_component_dict())})
+                            newResp = InteractionResponseModel(type=InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE, data=respData, interaction_id=int_id, interaction_token=int_token)
+                            print(f"Made it to final: {newResp}")
+                            return newResp
+                        else:
+                            newResp = InteractionResponseModel(type=InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE, data=dict({"content": "Inner Error"}), interaction_id=int_id, interaction_token=int_token)
+                            return newResp
                     else:
                         print("Page creation fail")
                 else:
@@ -681,7 +686,7 @@ async def discord_interaction(req: Request):
                 print("Options Fail")
         else:
             print("Name lookup failed")
-        newResp = InteractionResponseModel(type=InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, data=dict({}), interaction_id=int_id, interaction_token=int_token)
+        newResp = InteractionResponseModel(type=InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE, data=dict({"content": "Error"}), interaction_id=int_id, interaction_token=int_token)
         print(newResp)
         print(f"Application Command: {create_response_url(newResp)} {req_body}")
         return newResp
