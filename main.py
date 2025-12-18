@@ -661,19 +661,19 @@ async def discord_interaction(req: Request):
                         
                         embList = list()
                         embDict = backPg["embed"]
-                        #sections = backPg["article_sections"]
+                        sections = backPg["article_sections"]
                         if isinstance(embDict, DiscordEmbed) is True:
-                            #select_options: List[components.SelectOption] = []
-                            #for sect in sections:
-                            #    select_options.append(components.SelectOption(label=sect.title, value=sect.id))
-                            #select_menu = dui.Select(custom_id=value, placeholder="Sections", min_values=1, max_values=len(sections), options=select_options)
-                            #action_row = dui.ActionRow(select_menu)
-                            #components_list = list()
-                            #components_list.append(action_row.__dict__)
+                            select_options = list()
+                            for sect in sections:
+                                select_options.append(components.SelectOption(label=sect.title, value=sect.id))
+                            select_menu = dui.Select(custom_id=value, placeholder="Sections", min_values=1, max_values=len(sections), options=select_options)
+                            action_row = dui.ActionRow(select_menu)
+                            components_list = list()
+                            components_list.append(action_row.to_component_dict())
                             embList.append(embDict.__dict__ if isinstance(embDict, DiscordEmbed) else embDict)
-                            respData = dict({"embeds": embList})
+                            respData = dict({"embeds": embList, "components": components_list})
                             newResp = InteractionResponseModel(type=InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE, data=respData, interaction_id=int_id, interaction_token=int_token)
-                            print(f"Made it to final: {newResp}")
+                            print(f"Made it to final: {components_list}")
                             return newResp
                         else:
                             newResp = InteractionResponseModel(type=InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE, data=dict({"content": "Inner Error"}), interaction_id=int_id, interaction_token=int_token)
